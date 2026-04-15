@@ -1,0 +1,379 @@
+<!DOCTYPE html>
+<html lang="ko">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+<title>LSK EDSP Vision</title>
+<style>
+:root {
+  --mint: #2DFFC8;
+  --mint-dim: rgba(45,255,200,0.12);
+  --bg: #060d0b;
+  --surface: #0d1f1a;
+  --border: rgba(45,255,200,0.22);
+  --text: #e0f5f0;
+  --muted: rgba(224,245,240,0.45);
+}
+* { box-sizing: border-box; margin: 0; padding: 0; }
+body { background: var(--bg); color: var(--text); font-family: 'Helvetica Neue', Arial, sans-serif; min-height: 100vh; overflow-x: hidden; }
+body::before { content: ''; position: fixed; inset: 0; background-image: linear-gradient(rgba(45,255,200,0.025) 1px, transparent 1px), linear-gradient(90deg, rgba(45,255,200,0.025) 1px, transparent 1px); background-size: 36px 36px; pointer-events: none; z-index: 0; }
+.app { position: relative; z-index: 1; max-width: 640px; margin: 0 auto; padding-bottom: 40px; }
+header { padding: 18px 20px 14px; border-bottom: 1px solid var(--border); display: flex; align-items: center; gap: 12px; }
+.logo { width: 34px; height: 34px; border: 2px solid var(--mint); display: grid; place-items: center; font-size: 10px; font-weight: 700; color: var(--mint); letter-spacing: -0.5px; flex-shrink: 0; font-family: monospace; }
+.h-title { font-size: 14px; font-weight: 700; color: var(--mint); letter-spacing: 2px; font-family: monospace; }
+.h-sub { font-size: 11px; color: var(--muted); margin-top: 1px; }
+.vid-wrap { position: relative; background: #000; border-bottom: 1px solid var(--border); }
+.vid-inner { position: relative; width: 100%; aspect-ratio: 4/3; overflow: hidden; }
+#video { width: 100%; height: 100%; object-fit: cover; display: block; transform: scaleX(-1); }
+#canvas { position: absolute; inset: 0; width: 100%; height: 100%; transform: scaleX(-1); }
+.corner { position: absolute; width: 20px; height: 20px; border-color: var(--mint); border-style: solid; opacity: 0.7; }
+.tl { top: 10px; left: 10px; border-width: 2px 0 0 2px; }
+.tr { top: 10px; right: 10px; border-width: 2px 2px 0 0; }
+.bl { bottom: 10px; left: 10px; border-width: 0 0 2px 2px; }
+.br { bottom: 10px; right: 10px; border-width: 0 2px 2px 0; }
+#status { position: absolute; top: 10px; left: 50%; transform: translateX(-50%); background: rgba(6,13,11,0.88); border: 1px solid var(--border); padding: 3px 12px; font-size: 10px; color: var(--muted); font-family: monospace; white-space: nowrap; letter-spacing: 1px; backdrop-filter: blur(6px); }
+#status.on { color: var(--mint); border-color: rgba(45,255,200,0.5); }
+#fps { position: absolute; bottom: 10px; right: 10px; font-family: monospace; font-size: 9px; color: var(--muted); }
+.controls { display: flex; gap: 10px; padding: 14px 20px; border-bottom: 1px solid var(--border); }
+.btn { flex: 1; padding: 12px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: monospace; font-size: 11px; letter-spacing: 1px; cursor: pointer; transition: all .2s; }
+.btn:hover:not(:disabled) { border-color: var(--mint); color: var(--mint); }
+.btn.primary { background: var(--mint); color: var(--bg); border-color: var(--mint); font-weight: 700; }
+.btn.primary:hover:not(:disabled) { background: #00e6b0; }
+.btn:disabled { opacity: .3; cursor: not-allowed; }
+.sel-wrap { padding: 10px 20px 14px; border-bottom: 1px solid var(--border); }
+.sel-wrap label { font-size: 10px; color: var(--muted); font-family: monospace; letter-spacing: 1px; display: block; margin-bottom: 5px; }
+select { width: 100%; background: var(--surface); color: var(--text); border: 1px solid var(--border); padding: 8px 10px; font-size: 12px; appearance: none; }
+.edsp-grid { display: grid; grid-template-columns: 1fr 1fr; gap: 1px; background: var(--border); border: 1px solid var(--border); margin: 18px 20px; }
+.card { background: var(--bg); padding: 16px 14px; position: relative; overflow: hidden; transition: background .3s; }
+.card.live { background: var(--surface); }
+.card::before { content: ''; position: absolute; top: 0; left: 0; width: 3px; height: 100%; background: var(--mint); opacity: 0; transition: opacity .3s; }
+.card.live::before { opacity: 1; }
+.c-idx { font-family: monospace; font-size: 9px; color: var(--muted); letter-spacing: 2px; }
+.c-letter { font-family: monospace; font-size: 20px; font-weight: 700; color: var(--mint); line-height: 1.1; }
+.c-name { font-size: 10px; color: var(--muted); margin-bottom: 12px; }
+.c-val { font-family: monospace; font-size: 30px; font-weight: 700; color: var(--text); line-height: 1; transition: color .3s; }
+.c-val.hi { color: var(--mint); }
+.c-val.md { color: #f0c040; }
+.c-val.lo { color: #ff6060; }
+.c-unit { font-family: monospace; font-size: 10px; color: var(--muted); margin-top: 2px; }
+.bar { margin-top: 10px; height: 3px; background: rgba(255,255,255,0.05); overflow: hidden; }
+.bar-fill { height: 100%; width: 0%; background: var(--mint); transition: width .5s cubic-bezier(.16,1,.3,1); }
+.bar-fill.md { background: #f0c040; }
+.bar-fill.lo { background: #ff6060; }
+.c-desc { margin-top: 7px; font-size: 10px; color: var(--muted); line-height: 1.5; min-height: 28px; }
+.total { margin: 0 20px 18px; border: 1px solid var(--border); background: var(--surface); padding: 18px; display: flex; align-items: center; gap: 18px; }
+.detect { width: 44px; height: 44px; border-radius: 50%; border: 2px solid var(--border); display: grid; place-items: center; flex-shrink: 0; transition: border-color .3s; }
+.detect.on { border-color: var(--mint); box-shadow: 0 0 12px rgba(45,255,200,.4); animation: pulse 2s infinite; }
+@keyframes pulse { 0%,100%{box-shadow:0 0 8px rgba(45,255,200,.3)} 50%{box-shadow:0 0 22px rgba(45,255,200,.5)} }
+.dot { width: 9px; height: 9px; border-radius: 50%; background: var(--muted); transition: background .3s; }
+.detect.on .dot { background: var(--mint); }
+.total-r { flex: 1; }
+.t-label { font-family: monospace; font-size: 9px; color: var(--muted); letter-spacing: 2px; margin-bottom: 2px; }
+.t-val { font-family: monospace; font-size: 44px; font-weight: 700; color: var(--mint); line-height: 1; }
+.t-grade { font-family: monospace; font-size: 11px; color: var(--muted); margin-top: 3px; }
+.t-bar { margin-top: 10px; height: 3px; background: rgba(255,255,255,0.05); }
+.t-fill { height: 100%; background: linear-gradient(90deg, var(--mint), #00c8ff); width: 0%; transition: width .7s cubic-bezier(.16,1,.3,1); }
+.info { margin: 0 20px; padding: 12px 14px; border: 1px solid var(--border); background: var(--mint-dim); font-size: 11px; color: var(--mint); line-height: 1.7; }
+#loader { position: fixed; inset: 0; background: var(--bg); z-index: 100; display: flex; align-items: center; justify-content: center; flex-direction: column; }
+.l-logo { font-family: monospace; font-size: 26px; font-weight: 700; color: var(--mint); letter-spacing: 4px; margin-bottom: 6px; }
+.l-sub { font-size: 11px; color: var(--muted); letter-spacing: 2px; margin-bottom: 28px; }
+.l-bar { width: 180px; height: 2px; background: rgba(255,255,255,0.06); overflow: hidden; margin-bottom: 14px; }
+.l-fill { height: 100%; background: var(--mint); animation: lanim 1.6s ease infinite; }
+@keyframes lanim { 0%{width:0%;margin-left:0} 50%{width:55%;margin-left:45%} 100%{width:0%;margin-left:100%} }
+#l-status { font-family: monospace; font-size: 10px; color: var(--muted); letter-spacing: 1px; text-align: center; max-width: 260px; line-height: 1.6; }
+.l-skip { margin-top: 24px; padding: 10px 24px; border: 1px solid var(--border); background: transparent; color: var(--muted); font-family: monospace; font-size: 10px; cursor: pointer; letter-spacing: 1px; }
+.l-skip:hover { border-color: var(--mint); color: var(--mint); }
+</style>
+</head>
+<body>
+
+<div id="loader">
+  <div class="l-logo">LSK</div>
+  <div class="l-sub">MOVEMENT LAB</div>
+  <div class="l-bar"><div class="l-fill"></div></div>
+  <div id="l-status">AI 모델 로딩 중...</div>
+  <button class="l-skip" id="btn-skip">⚡ 바로 시작 (카메라만)</button>
+</div>
+
+<div class="app">
+  <header>
+    <div class="logo">LSK</div>
+    <div>
+      <div class="h-title">EDSP VISION</div>
+      <div class="h-sub">움직임연구소 · 실시간 보행 분석</div>
+    </div>
+  </header>
+
+  <div class="vid-wrap">
+    <div class="vid-inner">
+      <video id="video" autoplay playsinline muted></video>
+      <canvas id="canvas"></canvas>
+      <div class="corner tl"></div><div class="corner tr"></div>
+      <div class="corner bl"></div><div class="corner br"></div>
+      <div id="status">카메라 준비 중</div>
+      <div id="fps">-- fps</div>
+    </div>
+  </div>
+
+  <div class="sel-wrap">
+    <label>CAMERA SELECT</label>
+    <select id="cam-sel"></select>
+  </div>
+
+  <div class="controls">
+    <button class="btn primary" id="btn-start">▶ 분석 시작</button>
+    <button class="btn" id="btn-stop" disabled>■ 정지</button>
+  </div>
+
+  <div class="edsp-grid">
+    <div class="card" id="card-e"><div class="c-idx">INDICATOR 01</div><div class="c-letter">E</div><div class="c-name">Efficiency · 효율성</div><div class="c-val" id="v-e">--</div><div class="c-unit">점</div><div class="bar"><div class="bar-fill" id="b-e"></div></div><div class="c-desc" id="d-e">어깨·골반 정렬로 에너지 낭비를 측정합니다.</div></div>
+    <div class="card" id="card-d"><div class="c-idx">INDICATOR 02</div><div class="c-letter">D</div><div class="c-name">Dissociation · 분리성</div><div class="c-val" id="v-d">--</div><div class="c-unit">점</div><div class="bar"><div class="bar-fill" id="b-d"></div></div><div class="c-desc" id="d-d">상·하체 회전 분리 능력을 평가합니다.</div></div>
+    <div class="card" id="card-s"><div class="c-idx">INDICATOR 03</div><div class="c-letter">S</div><div class="c-name">Stability · 안정성</div><div class="c-val" id="v-s">--</div><div class="c-unit">점</div><div class="bar"><div class="bar-fill" id="b-s"></div></div><div class="c-desc" id="d-s">좌우 골반 안정성과 균형을 측정합니다.</div></div>
+    <div class="card" id="card-p"><div class="c-idx">INDICATOR 04</div><div class="c-letter">P</div><div class="c-name">Propulsion · 추진력</div><div class="c-val" id="v-p">--</div><div class="c-unit">°</div><div class="bar"><div class="bar-fill" id="b-p"></div></div><div class="c-desc" id="d-p">고관절~무릎~발목 각도로 추진 효율을 분석합니다.</div></div>
+  </div>
+
+  <div class="total">
+    <div class="detect" id="detect"><div class="dot"></div></div>
+    <div class="total-r">
+      <div class="t-label">EDSP TOTAL SCORE</div>
+      <div class="t-val" id="t-val">--</div>
+      <div class="t-grade" id="t-grade">분석 대기 중</div>
+      <div class="t-bar"><div class="t-fill" id="t-fill"></div></div>
+    </div>
+  </div>
+
+  <div class="info">전신이 화면에 잘 보이도록 1.5~2m 거리에서 촬영하세요.<br>측면 촬영 시 P(추진력) 정확도가 높아집니다.</div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow/tfjs@4.10.0/dist/tf.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@tensorflow-models/pose-detection@2.1.3/dist/pose-detection.min.js"></script>
+
+<script>
+let detector = null, stream = null, rafId = null;
+let isRunning = false, modelLoaded = false;
+let frameCount = 0, lastFps = Date.now();
+
+const video = document.getElementById('video');
+const canvas = document.getElementById('canvas');
+const ctx = canvas.getContext('2d');
+const statusEl = document.getElementById('status');
+const fpsEl = document.getElementById('fps');
+const lStatus = document.getElementById('l-status');
+const loader = document.getElementById('loader');
+const detect = document.getElementById('detect');
+
+function kp(kps, i) { const k = kps[i]; return (k && k.score > 0.3) ? k : null; }
+
+function angle3(a, b, c) {
+  const ab = [a.x-b.x, a.y-b.y], cb = [c.x-b.x, c.y-b.y];
+  const dot = ab[0]*cb[0]+ab[1]*cb[1];
+  const mag = Math.sqrt(ab[0]**2+ab[1]**2)*Math.sqrt(cb[0]**2+cb[1]**2);
+  return mag===0 ? 180 : Math.acos(Math.max(-1,Math.min(1,dot/mag)))*180/Math.PI;
+}
+
+function calcE(kps) {
+  const ls=kp(kps,5),rs=kp(kps,6),lh=kp(kps,11),rh=kp(kps,12);
+  if(!ls||!rs||!lh||!rh) return null;
+  const sTilt=Math.abs(ls.y-rs.y)/(Math.abs(ls.x-rs.x)+0.001);
+  const hTilt=Math.abs(lh.y-rh.y)/(Math.abs(lh.x-rh.x)+0.001);
+  return Math.max(0,Math.min(100,Math.round(100-Math.abs(sTilt-hTilt)*400)));
+}
+function calcD(kps) {
+  const ls=kp(kps,5),rs=kp(kps,6),lh=kp(kps,11),rh=kp(kps,12);
+  if(!ls||!rs||!lh||!rh) return null;
+  const sep=Math.abs((ls.x+rs.x)/2-(lh.x+rh.x)/2)/(Math.abs(ls.x-rs.x)+0.001);
+  return Math.max(0,Math.min(100,Math.round(sep*300)));
+}
+function calcS(kps) {
+  const lh=kp(kps,11),rh=kp(kps,12);
+  if(!lh||!rh) return null;
+  const ratio=Math.abs(lh.y-rh.y)/(Math.abs(lh.x-rh.x)+0.001);
+  return Math.max(0,Math.min(100,Math.round(100-ratio*500)));
+}
+function calcP(kps) {
+  const angles=[];
+  const lh=kp(kps,11),lk=kp(kps,13),la=kp(kps,15);
+  const rh=kp(kps,12),rk=kp(kps,14),ra=kp(kps,16);
+  if(lh&&lk&&la) angles.push(angle3(lh,lk,la));
+  if(rh&&rk&&ra) angles.push(angle3(rh,rk,ra));
+  return angles.length ? Math.round(angles.reduce((a,b)=>a+b)/angles.length) : null;
+}
+
+const CONN = [[5,6],[5,7],[7,9],[6,8],[8,10],[5,11],[6,12],[11,12],[11,13],[13,15],[12,14],[14,16]];
+
+function drawSkeleton(kps) {
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  ctx.strokeStyle='rgba(45,255,200,0.55)'; ctx.lineWidth=2;
+  for(const [i,j] of CONN) {
+    const a=kp(kps,i),b=kp(kps,j);
+    if(!a||!b) continue;
+    ctx.beginPath(); ctx.moveTo(a.x,a.y); ctx.lineTo(b.x,b.y); ctx.stroke();
+  }
+  for(const k of kps) {
+    if(!k||k.score<0.3) continue;
+    ctx.beginPath(); ctx.arc(k.x,k.y,4,0,Math.PI*2);
+    ctx.fillStyle='rgba(45,255,200,0.3)'; ctx.fill();
+    ctx.strokeStyle='#2DFFC8'; ctx.lineWidth=1.5; ctx.stroke();
+  }
+}
+
+function colorCls(v,isAngle) { return isAngle?(v>=155?'hi':v>=125?'md':'lo'):(v>=75?'hi':v>=45?'md':'lo'); }
+function barW(v,isAngle) { return isAngle?Math.round((v/180)*100):v; }
+
+const DESCS = {
+  E:[[75,'어깨·골반 정렬 우수 — 에너지 효율이 높습니다.'],[45,'약간의 보상 패턴이 감지됩니다.'],[0,'상하체 정렬 불균형 — 개선이 필요합니다.']],
+  D:[[75,'상·하체 분리 동작이 효과적입니다.'],[45,'분리 움직임이 부분적으로 제한됩니다.'],[0,'상·하체가 함께 움직이는 경향이 있습니다.']],
+  S:[[75,'좌우 골반 안정성이 양호합니다.'],[45,'골반 측방 흔들림이 감지됩니다.'],[0,'골반 불안정성이 높습니다 — 안정화 운동 권장.']],
+  P:[[155,'발목 추진 각도가 이상적입니다.'],[125,'추진 각도 개선 여지가 있습니다.'],[0,'추진 효율이 낮습니다 — 보행 패턴 점검 필요.']]
+};
+function getDesc(key,v) { for(const [th,txt] of DESCS[key]) if(v>=th) return txt; return ''; }
+
+function updateCard(id, v, isAngle) {
+  if(v===null) return;
+  const cl=colorCls(v,isAngle);
+  const ve=document.getElementById(`v-${id}`);
+  ve.textContent=v; ve.className=`c-val ${cl}`;
+  const bar=document.getElementById(`b-${id}`);
+  bar.style.width=barW(v,isAngle)+'%';
+  bar.className=`bar-fill${cl==='hi'?'':' '+cl}`;
+  document.getElementById(`d-${id}`).textContent=getDesc(id.toUpperCase(),v);
+  document.getElementById(`card-${id}`).classList.add('live');
+}
+
+function updateTotal(e,d,s,p) {
+  const vals=[e,d,s,p!=null?Math.round((p/180)*100):null].filter(x=>x!=null);
+  if(!vals.length) return;
+  const total=Math.round(vals.reduce((a,b)=>a+b)/vals.length);
+  document.getElementById('t-val').textContent=total;
+  document.getElementById('t-fill').style.width=total+'%';
+  const g=total>=80?'EXCELLENT · 우수':total>=65?'GOOD · 양호':total>=45?'FAIR · 보통':'NEEDS WORK · 개선 필요';
+  document.getElementById('t-grade').textContent=g;
+}
+
+async function loop() {
+  if(!isRunning) return;
+  if(video.readyState>=2) {
+    canvas.width=video.videoWidth||640;
+    canvas.height=video.videoHeight||480;
+    if(modelLoaded&&detector) {
+      try {
+        const poses=await detector.estimatePoses(video);
+        if(poses&&poses.length>0) {
+          const kps=poses[0].keypoints;
+          drawSkeleton(kps);
+          detect.classList.add('on');
+          statusEl.textContent='감지 중 · TRACKING'; statusEl.className='on';
+          const e=calcE(kps),d=calcD(kps),s=calcS(kps),p=calcP(kps);
+          updateCard('e',e,false); updateCard('d',d,false);
+          updateCard('s',s,false); updateCard('p',p,true);
+          updateTotal(e,d,s,p);
+        } else {
+          ctx.clearRect(0,0,canvas.width,canvas.height);
+          detect.classList.remove('on');
+          statusEl.textContent='전신을 화면에 맞춰주세요'; statusEl.className='';
+        }
+      } catch(err) {}
+    } else {
+      statusEl.textContent='카메라 연결됨 (AI 모델 없음)'; statusEl.className='';
+    }
+  }
+  frameCount++;
+  const now=Date.now();
+  if(now-lastFps>=1000){ fpsEl.textContent=frameCount+' fps'; frameCount=0; lastFps=now; }
+  rafId=requestAnimationFrame(loop);
+}
+
+async function listCams() {
+  const devs=await navigator.mediaDevices.enumerateDevices();
+  const sel=document.getElementById('cam-sel');
+  sel.innerHTML='';
+  devs.filter(d=>d.kind==='videoinput').forEach((c,i)=>{
+    const o=document.createElement('option');
+    o.value=c.deviceId; o.textContent=c.label||`카메라 ${i+1}`; sel.appendChild(o);
+  });
+}
+
+async function startCamera() {
+  if(stream) stream.getTracks().forEach(t=>t.stop());
+  if(rafId) cancelAnimationFrame(rafId);
+  const deviceId=document.getElementById('cam-sel').value;
+  try {
+    stream=await navigator.mediaDevices.getUserMedia({video:{deviceId:deviceId?{exact:deviceId}:undefined,width:{ideal:640},height:{ideal:480}}});
+    video.srcObject=stream;
+    await new Promise(r=>{ video.onloadedmetadata=r; });
+    video.play();
+    isRunning=true;
+    document.getElementById('btn-start').disabled=true;
+    document.getElementById('btn-stop').disabled=false;
+    statusEl.textContent='분석 중 · LIVE';
+    loop();
+  } catch(e) { alert('카메라 오류: '+e.message); }
+}
+
+function stopCamera() {
+  isRunning=false;
+  if(rafId) cancelAnimationFrame(rafId);
+  if(stream){ stream.getTracks().forEach(t=>t.stop()); stream=null; }
+  ctx.clearRect(0,0,canvas.width,canvas.height);
+  detect.classList.remove('on');
+  statusEl.textContent='정지됨'; statusEl.className='';
+  document.getElementById('btn-start').disabled=false;
+  document.getElementById('btn-stop').disabled=true;
+}
+
+async function openLoader() {
+  try {
+    await navigator.mediaDevices.getUserMedia({video:true});
+    await listCams();
+    loader.style.display='none';
+  } catch(e) {
+    lStatus.textContent='❌ 카메라 권한을 허용하고 새로고침 해주세요.';
+  }
+}
+
+document.getElementById('btn-start').addEventListener('click', startCamera);
+document.getElementById('btn-stop').addEventListener('click', stopCamera);
+document.getElementById('cam-sel').addEventListener('change', ()=>{ if(isRunning) startCamera(); });
+document.getElementById('btn-skip').addEventListener('click', openLoader);
+
+async function init() {
+  lStatus.textContent = 'AI 모델 로딩 중...';
+
+  // 카메라 권한 먼저
+  try {
+    await navigator.mediaDevices.getUserMedia({video:true});
+    await listCams();
+  } catch(e) {
+    lStatus.textContent = '❌ 카메라 권한을 허용해주세요.';
+    return;
+  }
+
+  // TF 모델 로딩 시도 (20초 타임아웃)
+  let modelOk = false;
+  try {
+    const tfLoad = (async () => {
+      if(typeof tf==='undefined'||typeof poseDetection==='undefined') return false;
+      await tf.ready();
+      detector = await poseDetection.createDetector(
+        poseDetection.SupportedModels.MoveNet,
+        { modelType: poseDetection.movenet.modelType.SINGLEPOSE_LIGHTNING }
+      );
+      return true;
+    })();
+    const tmout = new Promise(r=>setTimeout(()=>r(false), 20000));
+    modelOk = await Promise.race([tfLoad, tmout]);
+  } catch(e) { modelOk = false; }
+
+  if(modelOk) {
+    modelLoaded = true;
+    lStatus.textContent = '✓ AI 준비 완료!';
+  } else {
+    lStatus.textContent = '⚠️ AI 없이 시작합니다.\n(카메라 기능은 정상 동작)';
+  }
+  setTimeout(()=>{ loader.style.display='none'; }, 900);
+}
+
+init();
+</script>
+</body>
+</html>
